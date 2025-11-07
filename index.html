@@ -88,6 +88,12 @@
       </div>
     </div>
 
+    <div class="card" id="attachment-card" style="display:none">
+      <h2>Attachment profile</h2>
+      <p class="hint">Result from your call:</p>
+      <div id="attachment-profile" style="font-weight:700;font-size:20px">—</div>
+    </div>
+
     <div class="card">
       <h2>Known test script</h2>
       <p class="hint">If you want consistency across testers, try to answer in full sentences and avoid yes/no only.</p>
@@ -101,6 +107,14 @@
     const feedbackForm = document.getElementById('feedback-form');
     // Select the thank-you message element
     const feedbackSuccess = document.getElementById('feedback-success');
+    // Select the attachment profile elements
+    const attachmentCard = document.getElementById('attachment-card');
+    const attachmentValue = document.getElementById('attachment-profile');
+    // Store the webhook endpoint URL provided by Encountr
+    const WEBHOOK_URL = 'https://n8n.encountr.ai/webhook/e2678b92-c5ff-4e39-b96a-001b51e9fe1d';
+    // Placeholder for the HMAC secret used to sign webhook requests (replace before deploying)
+    const WEBHOOK_SECRET = 'REPLACE_WITH_WEBHOOK_SECRET';
+
     // Only proceed if the form exists on the page
     if (feedbackForm) {
       // Listen for form submission
@@ -148,6 +162,99 @@
           };
           xhr.send(formData);
         }
+      });
+    }
+
+    // Helper to parse a string like "{'profile_type': 'Secure'}" safely
+    function parseMaybeStringJson(value) {
+      if (typeof value === 'string') {
+        try { return JSON.parse(value.replace(/'/g, '"')); } catch (_) { return null; }
+      }
+      if (value && typeof value === 'object') return value;
+      return null;
+    }
+
+    // Try to extract and render the profile type from a payload
+    function maybeRenderProfile(payload) {
+      const raw = payload && payload.data_collection_results && payload.data_collection_results.eq_analysis && payload.data_collection_results.eq_analysis.value;
+      const parsed = parseMaybeStringJson(raw);
+      const profileType = parsed && (parsed.profile_type || parsed.profileType);
+      if (profileType && attachmentCard && attachmentValue) {
+        attachmentValue.textContent = profileType;
+        attachmentCard.style.display = 'block';
+        return true;
+      }
+      return false;
+    }
+
+    // Helper to extract the conversation id from different payload shapes
+    function extractConversationId(payload) {
+      if (!payload) return null;
+      if (payload.conversationId) return payload.conversationId;
+      if (payload.dynamic_variables && payload.dynamic_variables.system__conversation_id) {
+        return payload.dynamic_variables.system__conversation_id;
+      }
+      if (payload.system__conversation_id) return payload.system__conversation_id;
+      return null;
+    }
+
+    // Compute the required HMAC signature for the webhook POST body
+    async function computeWebhookSignature(message) {
+      if (!WEBHOOK_SECRET || !window.crypto || !window.crypto.subtle) return null;
+      const encoder = new TextEncoder();
+      const keyData = encoder.encode(WEBHOOK_SECRET);
+      const algorithm = { name: 'HMAC', hash: 'SHA-256' };
+      const cryptoKey = await window.crypto.subtle.importKey('raw', keyData, algorithm, false, ['sign']);
+      const signatureBuffer = await window.crypto.subtle.sign('HMAC', cryptoKey, encoder.encode(message));
+      const signatureArray = Array.from(new Uint8Array(signatureBuffer));
+      return signatureArray.map((byte) => byte.toString(16).padStart(2, '0')).join('');
+    }
+
+    // Fetch the attachment profile from the webhook endpoint
+    async function fetchProfileFromWebhook(conversationId) {
+      if (!conversationId || !WEBHOOK_URL) return false;
+      const body = JSON.stringify({ conversation_id: conversationId });
+      const headers = { 'Content-Type': 'application/json' };
+      const signature = await computeWebhookSignature(body);
+      if (signature) { headers['x-signature'] = signature; }
+      try {
+        const response = await fetch(WEBHOOK_URL, {
+          method: 'POST',
+          mode: 'cors',
+          headers,
+          body
+        });
+        if (!response.ok) return false;
+        const data = await response.json().catch(() => null);
+        if (!data) return false;
+        return maybeRenderProfile(data);
+      } catch (error) {
+        console.error('Webhook fetch failed', error);
+        return false;
+      }
+    }
+
+    // Listen for postMessage events from the ElevenLabs widget
+    window.addEventListener('message', async function(event) {
+      if (!event || !event.data) return;
+      if (maybeRenderProfile(event.data)) return;
+      if (event.data.detail && maybeRenderProfile(event.data.detail)) return;
+      const conversationId = extractConversationId(event.data) || extractConversationId(event.data.detail);
+      if (conversationId) { await fetchProfileFromWebhook(conversationId); }
+    });
+
+    // Also listen for possible custom events emitted by the widget
+    const convaiEl = document.querySelector('elevenlabs-convai');
+    if (convaiEl) {
+      convaiEl.addEventListener('conversationEnded', async function(ev) {
+        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
+        const conversationId = extractConversationId(ev && ev.detail);
+        if (conversationId) { await fetchProfileFromWebhook(conversationId); }
+      });
+      convaiEl.addEventListener('conversation-update', async function(ev) {
+        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
+        const conversationId = extractConversationId(ev && ev.detail);
+        if (conversationId) { await fetchProfileFromWebhook(conversationId); }
       });
     }
   </script>
