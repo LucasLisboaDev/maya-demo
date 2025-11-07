@@ -218,24 +218,37 @@
 
     // Fetch the attachment profile from the webhook endpoint
     async function fetchProfileFromWebhook(conversationId) {
-      if (!conversationId || !WEBHOOK_URL) return false;
+      if (!conversationId || !WEBHOOK_URL) {
+        console.log('Missing conversationId or WEBHOOK_URL');
+        return false;
+      }
+      console.log('Fetching profile for conversation:', conversationId);
       const body = JSON.stringify({ conversation_id: conversationId });
       const headers = { 'Content-Type': 'application/json' };
       const signature = await computeWebhookSignature(body);
-      if (signature) { headers['x-signature'] = signature; }
+      if (signature) { 
+        headers['x-signature'] = signature;
+        console.log('HMAC signature generated');
+      }
       try {
+        console.log('Sending request to:', WEBHOOK_URL);
         const response = await fetch(WEBHOOK_URL, {
           method: 'POST',
           mode: 'cors',
           headers,
           body
         });
-        if (!response.ok) return false;
+        console.log('Response status:', response.status);
+        if (!response.ok) {
+          console.error('Response not OK:', response.status, response.statusText);
+          return false;
+        }
         const data = await response.json().catch(() => null);
+        console.log('Received data:', data);
         if (!data) return false;
         return maybeRenderProfile(data);
       } catch (error) {
-        console.error('Webhook fetch failed', error);
+        console.error('Webhook fetch failed:', error);
         return false;
       }
     }
@@ -255,36 +268,58 @@
     // Also listen for possible custom events emitted by the widget
     const convaiEl = document.querySelector('elevenlabs-convai');
     if (convaiEl) {
+      console.log('ElevenLabs widget found, attaching event listeners');
       convaiEl.addEventListener('conversationEnded', async function(ev) {
+        console.log('conversationEnded event fired:', ev);
         const conversationId = extractConversationId(ev && ev.detail);
-        if (conversationId) { lastConversationId = conversationId; }
-        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
+        if (conversationId) { 
+          lastConversationId = conversationId;
+          console.log('Stored conversation ID:', conversationId);
+        }
+        if (ev && ev.detail) { 
+          console.log('Event detail:', ev.detail);
+          if (maybeRenderProfile(ev.detail)) {
+            console.log('Profile rendered from event');
+            return;
+          }
+        }
         // Don't auto-fetch; let user click the button
       });
       convaiEl.addEventListener('conversation-update', async function(ev) {
+        console.log('conversation-update event fired');
         const conversationId = extractConversationId(ev && ev.detail);
-        if (conversationId) { lastConversationId = conversationId; }
+        if (conversationId) { 
+          lastConversationId = conversationId;
+          console.log('Updated conversation ID:', conversationId);
+        }
         if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
         // Don't auto-fetch; let user click the button
       });
+    } else {
+      console.warn('ElevenLabs widget element not found');
     }
 
     // Wire the button to fetch the profile on demand
     if (loadProfileBtn) {
       loadProfileBtn.addEventListener('click', async function() {
+        console.log('Button clicked. lastConversationId:', lastConversationId);
         // Disable the button and show loading state
         loadProfileBtn.disabled = true;
         loadProfileBtn.textContent = 'Loading...';
         // Try to fetch using the last known conversation ID
         let success = false;
         if (lastConversationId) {
+          console.log('Attempting to fetch profile...');
           success = await fetchProfileFromWebhook(lastConversationId);
+          console.log('Fetch result:', success);
+        } else {
+          console.error('No conversation ID available');
         }
         // If failed, re-enable and show error
         if (!success) {
           loadProfileBtn.disabled = false;
           loadProfileBtn.textContent = 'Load my attachment profile';
-          alert('Unable to load profile. Please make sure you completed the call first.');
+          alert('Unable to load profile. Please make sure you completed the call first. Check browser console for details.');
         }
       });
     }
