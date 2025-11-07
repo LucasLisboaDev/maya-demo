@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Encountr • Maya Demo</title>
+  <link rel="icon" href="data:," />
+  <style>
+    :root { --ink:#0f172a; --soft:#f8fafc; --accent:#2563eb; }
+    body{margin:0;background:var(--soft);color:var(--ink);font:16px/1.5 Inter,system-ui,-apple-system,Segoe UI,Roboto;}
+    .wrap{max-width:880px;margin:0 auto;padding:24px;}
+    header{display:flex;justify-content:space-between;align-items:center;margin:8px 0 16px;}
+    .logo{font-weight:700;font-size:20px;letter-spacing:.3px}
+    .tag{font-size:12px;color:#475569}
+    .card{background:#fff;border-radius:16px;box-shadow:0 6px 24px rgba(2,6,23,.06);padding:20px;margin:16px 0;}
+    h1{font-size:28px;margin:0 0 8px}
+    h2{font-size:18px;margin:0 0 8px}
+    ol{padding-left:18px;margin:8px 0}
+    .hint{font-size:14px;color:#475569}
+    .grid{display:grid;gap:16px;grid-template-columns:1fr}
+    @media (min-width:860px){ .grid{grid-template-columns:1fr 1fr} }
+    .btn{display:inline-block;background:var(--accent);color:#fff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:600}
+    .footer{font-size:12px;color:#64748b;margin:24px 0 8px}
+    textarea,input,select{width:100%;border:1px solid #e2e8f0;border-radius:10px;padding:10px;font:inherit;background:#fff}
+    label{font-size:14px;color:#334155;margin:8px 0 6px;display:block}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div class="logo">Encountr</div>
+      <div class="tag">relationship analysis through voice</div>
+    </header>
+
+    <div class="card">
+      <h1>Maya — Onboarding Demo</h1>
+      <p class="hint">Tap the widget, allow mic access, and answer the 18 quick questions. Your profile will appear in your Encountr dashboard—results are not read aloud.</p>
+      <!-- ElevenLabs Widget -->
+      <elevenlabs-convai agent-id="agent_1701k70fs0asensb5xvb3rrqjr50"></elevenlabs-convai>
+      <script src="https://unpkg.com/@elevenlabs/convai-widget-embed" async type="text/javascript"></script>
+      <p class="hint">Tip: works best in Chrome (desktop or mobile). Use headphones in a noisy room.</p>
+    </div>
+
+    <div class="grid">
+      <div class="card">
+        <h2>How to test (2 minutes)</h2>
+        <ol>
+          <li>Click the widget • allow microphone.</li>
+          <li>Say “Ready” and answer the 18 questions in your normal speaking voice.</li>
+          <li>At the end, Maya will say the profile will be sent to your dashboard.</li>
+        </ol>
+        <p class="hint">If something feels off (latency, mishears, pacing), note it below.</p>
+      </div>
+
+      <div class="card">
+        <h2>Quick feedback</h2>
+        <!-- Replace action with your Google Form endpoint if you have one -->
+        <form method="post" action="https://example.com/feedback">
+          <label>Name (optional)</label>
+          <input name="name" placeholder="Your name" />
+
+          <label>Email (optional)</label>
+          <input name="email" type="email" placeholder="you@company.com" />
+
+          <label>Overall experience</label>
+          <select name="rating" required>
+            <option value="" disabled selected>Choose…</option>
+            <option>Excellent</option><option>Good</option>
+            <option>Okay</option><option>Poor</option>
+          </select>
+
+          <label>What worked well?</label>
+          <textarea name="pros" rows="3" placeholder="Clarity, speed, tone…"></textarea>
+
+          <label>What needs improvement?</label>
+          <textarea name="cons" rows="3" placeholder="Mishears, long pauses, phrasing…"></textarea>
+
+          <label>Device & browser</label>
+          <input name="env" placeholder="e.g., iPhone 14 / Chrome 120" />
+
+          <div style="margin-top:10px">
+            <button class="btn" type="submit">Submit feedback</button>
+          </div>
+        </form>
+        <p class="hint">No Google Form yet? Swap the <code>action=</code> above with your Form link or a simple webhook collector.</p>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2>Known test script</h2>
+      <p class="hint">If you want consistency across testers, try to answer in full sentences and avoid yes/no only.</p>
+      <a class="btn" href="#" onclick="alert('Tip: speak naturally; short pauses are fine.')" aria-label="Testing tips">Testing tips</a>
+    </div>
+
+    <div class="footer">© Encountr. Sounds right.</div>
+  </div>
+</body>
+</html>
