@@ -90,8 +90,10 @@
 
     <div class="card">
       <h2>Your attachment style</h2>
-      <p class="hint">Click this button after the call is over to check your attachment style for business relationships.</p>
-      <button class="btn" id="load-profile-btn">Load my attachment profile</button>
+      <p class="hint">After completing your call with Maya, your attachment style for business relationships will appear here automatically.</p>
+      <div id="attachment-waiting" style="display:none;margin-top:16px">
+        <p style="color:#64748b;font-style:italic">⏳ Processing your call results...</p>
+      </div>
       <div id="attachment-result" style="display:none;margin-top:16px">
         <p class="hint">Your attachment style:</p>
         <div id="attachment-profile" style="font-weight:700;font-size:24px;color:var(--accent)">—</div>
@@ -112,13 +114,26 @@
     // Select the thank-you message element
     const feedbackSuccess = document.getElementById('feedback-success');
     // Select the attachment profile elements
-    const loadProfileBtn = document.getElementById('load-profile-btn');
+    const attachmentWaiting = document.getElementById('attachment-waiting');
     const attachmentResult = document.getElementById('attachment-result');
     const attachmentValue = document.getElementById('attachment-profile');
     // Store the webhook endpoint URL provided by Encountr
     const WEBHOOK_URL = 'https://n8n.encountr.ai/webhook/41fac57f-ff3d-4dcf-a4ac-9c76d995502d';
     // Placeholder for the HMAC secret used to sign webhook requests (replace before deploying)
     const WEBHOOK_SECRET = 'wsec_5292680e0d7d903114d3908427c43980c2d42fbc46f90657f461f9229a09312c';
+    
+    // Generate or retrieve a unique session ID for this page load
+    let sessionId = sessionStorage.getItem('encountr_session_id');
+    if (!sessionId) {
+      sessionId = 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+      sessionStorage.setItem('encountr_session_id', sessionId);
+    }
+    console.log('Session ID:', sessionId);
+    
+    // Store polling state
+    let pollingInterval = null;
+    let pollAttempts = 0;
+    const MAX_POLL_ATTEMPTS = 60; // Poll for up to 5 minutes (60 * 5 seconds)
 
     // Only proceed if the form exists on the page
     if (feedbackForm) {
@@ -186,8 +201,9 @@
       const profileType = parsed && (parsed.profile_type || parsed.profileType);
       if (profileType && attachmentResult && attachmentValue) {
         attachmentValue.textContent = profileType;
+        if (attachmentWaiting) { attachmentWaiting.style.display = 'none'; }
         attachmentResult.style.display = 'block';
-        if (loadProfileBtn) { loadProfileBtn.style.display = 'none'; }
+        console.log('Profile rendered successfully:', profileType);
         return true;
       }
       return false;
@@ -216,22 +232,20 @@
       return signatureArray.map((byte) => byte.toString(16).padStart(2, '0')).join('');
     }
 
-    // Fetch the attachment profile from the webhook endpoint
-    async function fetchProfileFromWebhook(conversationId) {
-      if (!conversationId || !WEBHOOK_URL) {
-        console.log('Missing conversationId or WEBHOOK_URL');
+    // Fetch the attachment profile using the session ID
+    async function fetchProfileBySession() {
+      if (!sessionId || !WEBHOOK_URL) {
+        console.log('Missing sessionId or WEBHOOK_URL');
         return false;
       }
-      console.log('Fetching profile for conversation:', conversationId);
-      const body = JSON.stringify({ conversation_id: conversationId });
+      console.log('Fetching profile for session:', sessionId);
+      const body = JSON.stringify({ session_id: sessionId, action: 'get_profile' });
       const headers = { 'Content-Type': 'application/json' };
       const signature = await computeWebhookSignature(body);
       if (signature) { 
         headers['x-signature'] = signature;
-        console.log('HMAC signature generated');
       }
       try {
-        console.log('Sending request to:', WEBHOOK_URL);
         const response = await fetch(WEBHOOK_URL, {
           method: 'POST',
           mode: 'cors',
@@ -252,14 +266,52 @@
         return false;
       }
     }
+    
+    // Start polling for profile results
+    function startPolling() {
+      if (pollingInterval) return; // Already polling
+      console.log('Starting to poll for results...');
+      if (attachmentWaiting) { attachmentWaiting.style.display = 'block'; }
+      pollAttempts = 0;
+      
+      pollingInterval = setInterval(async () => {
+        pollAttempts++;
+        console.log(`Poll attempt ${pollAttempts}/${MAX_POLL_ATTEMPTS}`);
+        
+        const success = await fetchProfileBySession();
+        if (success) {
+          console.log('Profile loaded successfully!');
+          stopPolling();
+          if (attachmentWaiting) { attachmentWaiting.style.display = 'none'; }
+        } else if (pollAttempts >= MAX_POLL_ATTEMPTS) {
+          console.warn('Max poll attempts reached, stopping');
+          stopPolling();
+          if (attachmentWaiting) { 
+            attachmentWaiting.innerHTML = '<p style="color:#ef4444">Unable to load profile. Please refresh and try again.</p>';
+          }
+        }
+      }, 5000); // Poll every 5 seconds
+    }
+    
+    // Stop polling
+    function stopPolling() {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+        pollingInterval = null;
+      }
+    }
 
     // Listen for postMessage events from the ElevenLabs widget
     window.addEventListener('message', async function(event) {
       if (!event || !event.data) return;
+      console.log('postMessage received:', event.data);
       if (maybeRenderProfile(event.data)) return;
       if (event.data.detail && maybeRenderProfile(event.data.detail)) return;
       const conversationId = extractConversationId(event.data) || extractConversationId(event.data.detail);
-      if (conversationId) { await fetchProfileFromWebhook(conversationId); }
+      if (conversationId) { 
+        lastConversationId = conversationId;
+        console.log('Conversation ID captured from postMessage:', conversationId);
+      }
     });
 
     // Store the last conversation ID from widget events
@@ -283,7 +335,9 @@
             return;
           }
         }
-        // Don't auto-fetch; let user click the button
+        // Start polling for results
+        console.log('Conversation ended, starting to poll for profile...');
+        startPolling();
       });
       convaiEl.addEventListener('conversation-update', async function(ev) {
         console.log('conversation-update event fired');
@@ -293,36 +347,15 @@
           console.log('Updated conversation ID:', conversationId);
         }
         if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
-        // Don't auto-fetch; let user click the button
       });
     } else {
       console.warn('ElevenLabs widget element not found');
     }
 
-    // Wire the button to fetch the profile on demand
-    if (loadProfileBtn) {
-      loadProfileBtn.addEventListener('click', async function() {
-        console.log('Button clicked. lastConversationId:', lastConversationId);
-        // Disable the button and show loading state
-        loadProfileBtn.disabled = true;
-        loadProfileBtn.textContent = 'Loading...';
-        // Try to fetch using the last known conversation ID
-        let success = false;
-        if (lastConversationId) {
-          console.log('Attempting to fetch profile...');
-          success = await fetchProfileFromWebhook(lastConversationId);
-          console.log('Fetch result:', success);
-        } else {
-          console.error('No conversation ID available');
-        }
-        // If failed, re-enable and show error
-        if (!success) {
-          loadProfileBtn.disabled = false;
-          loadProfileBtn.textContent = 'Load my attachment profile';
-          alert('Unable to load profile. Please make sure you completed the call first. Check browser console for details.');
-        }
-      });
-    }
+    // Clean up on page unload
+    window.addEventListener('beforeunload', function() {
+      stopPolling();
+    });
   </script>
 </body>
 </html>
