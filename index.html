@@ -88,10 +88,14 @@
       </div>
     </div>
 
-    <div class="card" id="attachment-card" style="display:none">
-      <h2>Attachment profile</h2>
-      <p class="hint">Result from your call:</p>
-      <div id="attachment-profile" style="font-weight:700;font-size:20px">—</div>
+    <div class="card">
+      <h2>Your attachment style</h2>
+      <p class="hint">Click this button after the call is over to check your attachment style for business relationships.</p>
+      <button class="btn" id="load-profile-btn">Load my attachment profile</button>
+      <div id="attachment-result" style="display:none;margin-top:16px">
+        <p class="hint">Your attachment style:</p>
+        <div id="attachment-profile" style="font-weight:700;font-size:24px;color:var(--accent)">—</div>
+      </div>
     </div>
 
     <div class="card">
@@ -108,7 +112,8 @@
     // Select the thank-you message element
     const feedbackSuccess = document.getElementById('feedback-success');
     // Select the attachment profile elements
-    const attachmentCard = document.getElementById('attachment-card');
+    const loadProfileBtn = document.getElementById('load-profile-btn');
+    const attachmentResult = document.getElementById('attachment-result');
     const attachmentValue = document.getElementById('attachment-profile');
     // Store the webhook endpoint URL provided by Encountr
     const WEBHOOK_URL = 'https://n8n.encountr.ai/webhook/e2678b92-c5ff-4e39-b96a-001b51e9fe1d';
@@ -179,9 +184,10 @@
       const raw = payload && payload.data_collection_results && payload.data_collection_results.eq_analysis && payload.data_collection_results.eq_analysis.value;
       const parsed = parseMaybeStringJson(raw);
       const profileType = parsed && (parsed.profile_type || parsed.profileType);
-      if (profileType && attachmentCard && attachmentValue) {
+      if (profileType && attachmentResult && attachmentValue) {
         attachmentValue.textContent = profileType;
-        attachmentCard.style.display = 'block';
+        attachmentResult.style.display = 'block';
+        if (loadProfileBtn) { loadProfileBtn.style.display = 'none'; }
         return true;
       }
       return false;
@@ -243,18 +249,43 @@
       if (conversationId) { await fetchProfileFromWebhook(conversationId); }
     });
 
+    // Store the last conversation ID from widget events
+    let lastConversationId = null;
+
     // Also listen for possible custom events emitted by the widget
     const convaiEl = document.querySelector('elevenlabs-convai');
     if (convaiEl) {
       convaiEl.addEventListener('conversationEnded', async function(ev) {
-        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
         const conversationId = extractConversationId(ev && ev.detail);
-        if (conversationId) { await fetchProfileFromWebhook(conversationId); }
+        if (conversationId) { lastConversationId = conversationId; }
+        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
+        // Don't auto-fetch; let user click the button
       });
       convaiEl.addEventListener('conversation-update', async function(ev) {
-        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
         const conversationId = extractConversationId(ev && ev.detail);
-        if (conversationId) { await fetchProfileFromWebhook(conversationId); }
+        if (conversationId) { lastConversationId = conversationId; }
+        if (ev && ev.detail && maybeRenderProfile(ev.detail)) return;
+        // Don't auto-fetch; let user click the button
+      });
+    }
+
+    // Wire the button to fetch the profile on demand
+    if (loadProfileBtn) {
+      loadProfileBtn.addEventListener('click', async function() {
+        // Disable the button and show loading state
+        loadProfileBtn.disabled = true;
+        loadProfileBtn.textContent = 'Loading...';
+        // Try to fetch using the last known conversation ID
+        let success = false;
+        if (lastConversationId) {
+          success = await fetchProfileFromWebhook(lastConversationId);
+        }
+        // If failed, re-enable and show error
+        if (!success) {
+          loadProfileBtn.disabled = false;
+          loadProfileBtn.textContent = 'Load my attachment profile';
+          alert('Unable to load profile. Please make sure you completed the call first.');
+        }
       });
     }
   </script>
