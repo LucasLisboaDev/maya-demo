@@ -83,6 +83,7 @@
           </div>
         </form>
         <p class="hint" id="feedback-success" style="display:none">Thanks for your feedback — we appreciate it!</p>
+        <noscript><p class="hint">JavaScript is disabled. Please use this link to submit: <a href="https://formspree.io/f/mvgdppdg" target="_blank" rel="noopener">Open feedback form</a>.</p></noscript>
         <p class="hint">No Google Form yet? Swap the <code>action=</code> above with your Form link or a simple webhook collector.</p>
       </div>
     </div>
@@ -100,45 +101,52 @@
     const feedbackForm = document.getElementById('feedback-form');
     // Select the thank-you message element
     const feedbackSuccess = document.getElementById('feedback-success');
-    // Proceed only if the form is present
+    // Only proceed if the form exists on the page
     if (feedbackForm) {
-      // Attach submit event handler
-      feedbackForm.addEventListener('submit', async function(event) {
-        // Prevent default HTML form submission
+      // Listen for form submission
+      feedbackForm.addEventListener('submit', function(event) {
+        // Prevent default navigation
         event.preventDefault();
-        // Find the submit button inside the form
+        // Locate the submit button inside the form
         const submitBtn = feedbackForm.querySelector('button[type="submit"]');
-        // Disable the button and show sending state
+        // Disable the button while sending
         if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending...'; }
-        // Collect form fields as FormData
-        const data = new FormData(feedbackForm);
-        // Send the request to Formspree
-        try {
-          // Await fetch with method and headers expected by Formspree
-          const response = await fetch(feedbackForm.action, {
-            method: feedbackForm.method.toUpperCase(),
-            body: data,
-            headers: { 'Accept': 'application/json' }
-          });
-          // On success, reset form and show thank-you
-          if (response.ok) {
-            // Clear the form fields
-            feedbackForm.reset();
-            // Hide the form so the success state is clear
-            feedbackForm.style.display = 'none';
-            // Reveal the thank-you message
-            if (feedbackSuccess) { feedbackSuccess.style.display = 'block'; }
-          } else {
-            // Re-enable the button and restore label
-            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit feedback'; }
-            // Notify the user of the failure
-            alert('Sorry, something went wrong. Please try again later.');
-          }
-        } catch (err) {
-          // Re-enable the button and restore label on network error
+        // Prepare form data
+        const formData = new FormData(feedbackForm);
+        // Helper: handle successful submission
+        function handleSuccess() {
+          feedbackForm.reset();
+          feedbackForm.style.display = 'none';
+          if (feedbackSuccess) { feedbackSuccess.style.display = 'block'; }
+        }
+        // Helper: handle failures and re-enable button
+        function handleFailure(message) {
           if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit feedback'; }
-          // Notify the user about the network issue
-          alert('Network error. Please try again later.');
+          alert(message || 'Sorry, something went wrong. Please try again later.');
+        }
+        // Prefer fetch if available
+        if (window.fetch) {
+          fetch(feedbackForm.action, {
+            method: feedbackForm.method.toUpperCase(),
+            body: formData,
+            headers: { 'Accept': 'application/json' }
+          }).then(function(response) {
+            if (response.ok) { handleSuccess(); }
+            else { handleFailure(); }
+          }).catch(function() {
+            handleFailure('Network error. Please try again later.');
+          });
+        } else {
+          // Fallback: XMLHttpRequest for older browsers
+          var xhr = new XMLHttpRequest();
+          xhr.open(feedbackForm.method.toUpperCase(), feedbackForm.action);
+          xhr.setRequestHeader('Accept', 'application/json');
+          xhr.onreadystatechange = function () {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return;
+            if (xhr.status >= 200 && xhr.status < 300) { handleSuccess(); }
+            else { handleFailure(); }
+          };
+          xhr.send(formData);
         }
       });
     }
