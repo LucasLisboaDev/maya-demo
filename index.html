@@ -54,8 +54,8 @@
 
       <div class="card">
         <h2>Quick feedback</h2>
-        <!-- Replace action with your Google Form endpoint if you have one -->
-        <form method="post" action="https://example.com/feedback">
+        <!-- Form submits to Formspree endpoint -->
+        <form id="feedback-form" method="post" action="https://formspree.io/f/mvgdppdg" accept-charset="UTF-8">
           <label>Name (optional)</label>
           <input name="name" placeholder="Your name" />
 
@@ -82,6 +82,7 @@
             <button class="btn" type="submit">Submit feedback</button>
           </div>
         </form>
+        <p class="hint" id="feedback-success" style="display:none">Thanks for your feedback — we appreciate it!</p>
         <p class="hint">No Google Form yet? Swap the <code>action=</code> above with your Form link or a simple webhook collector.</p>
       </div>
     </div>
@@ -94,5 +95,53 @@
 
     <div class="footer">© Encountr. Sounds right.</div>
   </div>
+  <script>
+    // Select the feedback form element
+    const feedbackForm = document.getElementById('feedback-form');
+    // Select the thank-you message element
+    const feedbackSuccess = document.getElementById('feedback-success');
+    // Proceed only if the form is present
+    if (feedbackForm) {
+      // Attach submit event handler
+      feedbackForm.addEventListener('submit', async function(event) {
+        // Prevent default HTML form submission
+        event.preventDefault();
+        // Find the submit button inside the form
+        const submitBtn = feedbackForm.querySelector('button[type="submit"]');
+        // Disable the button and show sending state
+        if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Sending...'; }
+        // Collect form fields as FormData
+        const data = new FormData(feedbackForm);
+        // Send the request to Formspree
+        try {
+          // Await fetch with method and headers expected by Formspree
+          const response = await fetch(feedbackForm.action, {
+            method: feedbackForm.method.toUpperCase(),
+            body: data,
+            headers: { 'Accept': 'application/json' }
+          });
+          // On success, reset form and show thank-you
+          if (response.ok) {
+            // Clear the form fields
+            feedbackForm.reset();
+            // Hide the form so the success state is clear
+            feedbackForm.style.display = 'none';
+            // Reveal the thank-you message
+            if (feedbackSuccess) { feedbackSuccess.style.display = 'block'; }
+          } else {
+            // Re-enable the button and restore label
+            if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit feedback'; }
+            // Notify the user of the failure
+            alert('Sorry, something went wrong. Please try again later.');
+          }
+        } catch (err) {
+          // Re-enable the button and restore label on network error
+          if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit feedback'; }
+          // Notify the user about the network issue
+          alert('Network error. Please try again later.');
+        }
+      });
+    }
+  </script>
 </body>
 </html>
